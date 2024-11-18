@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "postgres",
+    "password": "mamberto16",
+    "database": "famhold_db",
+    "host": "127.0.0.1",
+    "dialect": "postgres"
+  },
+  "test": {
+    "username": "postgres",
+    "password": "mamberto16",
+    "database": "your_test_database",
+    "host": "127.0.0.1",
+    "dialect": "postgres"
+  },
+  "production": {
+    "username": "postgres",
+    "password": "mamberto16",
+    "database": "your_production_database",
+    "host": "127.0.0.1",
+    "dialect": "postgres"
+  }
+}
