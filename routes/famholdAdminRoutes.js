@@ -1,6 +1,5 @@
 import express from 'express';
 import { createFamholdAdmin, validateFamholdAdmin } from '../controllers/famholdAdminController.js';
-import { verifyToken } from '../midlewares/jwt.js';
 
 const router = express.Router();
 

@@ -1,10 +1,10 @@
 import AccountManager from "../models/accountManager.js";
 import bcryptjs from "bcryptjs";
-import jwt from 'jsonwebtoken';
+import jwt from "jsonwebtoken";
+import { sendVerificationCode } from "../midlewares/mfa.js";
 
 export const createAccountManager = async (req, res) => {
-  const { username, name, email, phoneNumber, password } =
-    req.body;
+  const { username, name, email, phoneNumber, password } = req.body;
 
   if (!username || typeof username !== "string") {
     return res
@@ -58,11 +58,9 @@ export const createAccountManager = async (req, res) => {
     console.error("Error creating Account Manager:", error);
 
     if (error.name === "SequelizeUniqueConstraintError") {
-      return res
-        .status(400)
-        .json({
-          message: "An Account Manager with this email already exists.",
-        });
+      return res.status(400).json({
+        message: "An Account Manager with this email already exists.",
+      });
     }
 
     return res.status(500).json({
@@ -76,26 +74,29 @@ export const validateAccountManager = async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    const user = await AccountManager.findOne({ where: { username } });
+    const accountManagerUser = await AccountManager.findOne({ where: { username } });
 
-    if (!user) {
+    if (!accountManagerUser) {
       return res.status(404).json({ message: "Account manager not found" });
     }
 
-    const isPasswordValid = await bcryptjs.compare(password, user.password);
+    const isPasswordValid = await bcryptjs.compare(password, accountManagerUser.password);
+
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const jsonwToken = jwt.sign(
-      { username: user.username, role: "accountManager" },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "5m",
-      }
-    );
+    const { success, token, error } = await sendVerificationCode(accountManagerUser.email);
 
-    res.status(200).json({ user, token: jsonwToken });
+    if (!success) {
+      return res.status(500).json({ error });
+    }
+
+    res.status(200).json({
+      message: "Verification code sent successfully.",
+      token,
+    });
+
   } catch (error) {
     console.error("Error validating user:", error);
     res.status(500).json({ message: "Error validating user", error });

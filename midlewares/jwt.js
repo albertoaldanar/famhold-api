@@ -33,7 +33,6 @@ import CryptoJS from "crypto-js";
   }
 };
 
-
 export const encryptObject = (data, excludeKeys = []) => {
   const encryptedObject = {};
 
