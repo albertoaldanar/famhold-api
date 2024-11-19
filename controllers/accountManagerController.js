@@ -88,7 +88,7 @@ export const validateAccountManager = async (req, res) => {
     }
 
     const jsonwToken = jwt.sign(
-      { username: user.username },
+      { username: user.username, role: "accountManager" },
       process.env.JWT_SECRET,
       {
         expiresIn: "5m",

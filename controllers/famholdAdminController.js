@@ -67,7 +67,7 @@ export const validateFamholdAdmin = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const jsonwToken = jwt.sign({ username: user.username }, process.env.JWT_SECRET, {
+    const jsonwToken = jwt.sign({ username: user.username, role: "famholdAdmin" }, process.env.JWT_SECRET, {
       expiresIn: "5m",
     });
 

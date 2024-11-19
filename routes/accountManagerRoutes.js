@@ -4,7 +4,7 @@ import { verifyToken } from '../midlewares/jwt.js';
 
 const router = express.Router();
 
-router.post('/createAccountManager', verifyToken, createAccountManager);
+router.post('/createAccountManager', verifyToken(["famholdAdmin"]), createAccountManager);
 router.post('/loginAccountManager', validateAccountManager);
 
 export default router;

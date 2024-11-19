@@ -8,7 +8,7 @@ import CryptoJS from "crypto-js";
  * @returns {Object} - A new object with encrypted and unencrypted values.
  */
 
-export const verifyToken = (req, res, next) => {
+ export const verifyToken = (allowedRoles = []) => (req, res, next) => {
   let token = req.headers.authorization;
 
   if (!token) {
@@ -18,15 +18,21 @@ export const verifyToken = (req, res, next) => {
   token = token.split(" ")[1];
 
   try {
-    const { username } = jwt.verify(token, process.env.JWT_SECRET);
-    req.username = username;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.username = decoded.username;
+    req.role = decoded.role; 
+
+    if (allowedRoles.length > 0 && !allowedRoles.includes(req.role)) {
+      return res.status(403).json({ error: "Access forbidden: insufficient permissions" });
+    }
 
     next();
   } catch (error) {
-    console.log(error);
+    console.error("Token verification error:", error);
     return res.status(400).json({ error: "Invalid token" });
   }
 };
+
 
 export const encryptObject = (data, excludeKeys = []) => {
   const encryptedObject = {};
