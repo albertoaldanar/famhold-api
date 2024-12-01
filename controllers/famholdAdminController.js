@@ -62,7 +62,7 @@ export const validateFamholdAdmin = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const { success, token, error } = await sendVerificationCode(user.email);
+    const { success, token, error } = await sendVerificationCode(user.email, user.username, 'famholdAdmin');
 
     if (!success) {
       return res.status(500).json({ error });

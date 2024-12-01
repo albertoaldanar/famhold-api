@@ -10,6 +10,10 @@ export const Family = sequelize.define('Family', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  familyToken: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
 });
 
 export default Family;

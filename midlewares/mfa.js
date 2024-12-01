@@ -1,25 +1,30 @@
 import jwt from "jsonwebtoken";
-import emailjs from "emailjs-com";
+import nodemailer from "nodemailer";
 
-export const sendVerificationCode = async (email) => {
+export const sendVerificationCode = async (email, username, role) => {
   const code = Math.floor(100000 + Math.random() * 900000);
 
-  const token = jwt.sign({ code }, process.env.JWT_SECRET, {
-    expiresIn: "2m",
+  const token = jwt.sign({ code, username, role }, process.env.JWT_SECRET, {
+    expiresIn: "5m",
   });
 
-  const templateParams = {
-    to_email: email,
-    message: `Tu código de verificación es: ${code}`,
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass:  process.env.EMAIL_PASS
+    }
+  });
+
+  const mailOptions = {
+    from: '"Famhold - VFO" <albertoaldanar@gmail.com>',
+    to: email,
+    subject: "Codigo de verificación",
+    text: `Tu código de verificación es: ${code}`,
   };
 
   try {
-    const response = await emailjs.send(
-      process.env.EMAILJS_SERVICE_ID,
-      process.env.EMAILJS_TEMPLATE_ID,
-      templateParams,
-      process.env.EMAILJS_PUBLIC_KEY
-    );
+    const response = await transporter.sendMail(mailOptions);
 
     console.log("Email sent successfully:", response);
 
@@ -31,12 +36,19 @@ export const sendVerificationCode = async (email) => {
 };
 
 export const validateCode = (req, res) => {
-  const { token, userCode, role, username } = req.body;
+  let token = req.headers.authorization;
+  const { userCode } = req.body;
+
+  token = token.split(" ")[1];
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const code = decoded.code;
+    const username = decoded.username;
+    const role = decoded.role;
 
-    if (decoded.code === userCode) {
+    if (code === userCode) {
+      let userData;
       const jsonwToken = jwt.sign(
         { username, role },
         process.env.JWT_SECRET,
@@ -45,7 +57,13 @@ export const validateCode = (req, res) => {
         }
       );
 
-      return res.status(200).json({ message: "Code validated successfully!", token: jsonwToken });
+      if(role === 'vfoUser'){
+        userData = {familyId: 1, username, role }
+      } else {
+        userData = { username, role }
+      }
+
+      return res.status(200).json({ message: "Code validated successfully!", token: jsonwToken, data: userData });
     } else {
       return res.status(400).json({ message: "Invalid code." });
     }

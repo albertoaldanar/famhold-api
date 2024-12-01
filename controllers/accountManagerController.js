@@ -86,7 +86,7 @@ export const validateAccountManager = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const { success, token, error } = await sendVerificationCode(accountManagerUser.email);
+    const { success, token, error } = await sendVerificationCode(accountManagerUser.email, accountManagerUser.username, 'accountManager');
 
     if (!success) {
       return res.status(500).json({ error });
