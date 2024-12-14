@@ -1,11 +1,15 @@
 import jwt from "jsonwebtoken";
+import { format } from 'date-fns';
 import nodemailer from "nodemailer";
+import bcryptjs from "bcryptjs";
+import NotPermittedDevice from "../models/notPermittedDevice.js";
+import User from "../models/User.js";
 
 export const sendVerificationCode = async (email, username, role) => {
   const code = Math.floor(100000 + Math.random() * 900000);
 
   const token = jwt.sign({ code, username, role }, process.env.JWT_SECRET, {
-    expiresIn: "5m",
+    expiresIn: "2m",
   });
 
   const transporter = nodemailer.createTransport({
@@ -35,19 +39,56 @@ export const sendVerificationCode = async (email, username, role) => {
   }
 };
 
-export const validateCode = (req, res) => {
+export const validateCode = async (req, res) => {
   let token = req.headers.authorization;
-  const { userCode } = req.body;
+  const { userCode, deviceFingerPrint, location, deviceInfo } = req.body;
 
   token = token.split(" ")[1];
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const code = decoded.code;
-    const username = decoded.username;
-    const role = decoded.role;
+    const { code, username, role } = decoded;
 
     if (code === userCode) {
+      const user = await User.findOne({ where: { username } });
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found." });
+      }
+
+      const permittedDevices = user.permittedDevices || [];
+
+      const isDevicePermitted = await Promise.all(
+        permittedDevices.map((hashedDevice) =>
+          bcryptjs.compare(deviceFingerPrint, hashedDevice)
+        )
+      ).then((results) => results.some((match) => match));
+
+      if (!isDevicePermitted) {
+        const lastLoginAttempt = format(new Date(), 'dd/MM/yyyy - HH:mm');
+        const hashedDeviceFingerprint = await bcryptjs.hash(deviceFingerPrint, 10);
+
+        const encryptedData = encryptObject(
+          {
+            location: location || "Unknown",
+            deviceInfo: deviceInfo || "Unknown",
+            lastLoginAttempt,
+          },
+          ['userId']
+        );
+
+        await NotPermittedDevice.create({
+          ...encryptedData,
+          deviceFingerprint: hashedDeviceFingerprint,
+          userId: user.id,
+        });
+
+        return res.status(403).json({
+          message:
+            "Este dispositivo no tiene permiso para entrar, por favor contacte a su asesor de cuenta para registrarlo.",
+        });
+      }
+
       let userData;
       const jsonwToken = jwt.sign(
         { username, role },
@@ -57,13 +98,15 @@ export const validateCode = (req, res) => {
         }
       );
 
-      if(role === 'vfoUser'){
-        userData = {familyId: 1, username, role }
+      if (role === "vfoUser") {
+        userData = { familyId: user.familyId, username, role };
       } else {
-        userData = { username, role }
+        userData = { username, role };
       }
 
-      return res.status(200).json({ message: "Code validated successfully!", token: jsonwToken, data: userData });
+      return res
+        .status(200)
+        .json({ message: "Code validated successfully!", token: jsonwToken, data: userData });
     } else {
       return res.status(400).json({ message: "Invalid code." });
     }
@@ -72,3 +115,4 @@ export const validateCode = (req, res) => {
     return res.status(400).json({ message: "Invalid or expired token." });
   }
 };
+
