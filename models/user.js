@@ -2,6 +2,7 @@ import { DataTypes } from 'sequelize';
 import sequelize from '../database/database.js';
 import FamilyMember from './familyMember.js';
 import Provider from './provider.js';
+import VFO from './vfo.js';
 
 const User = sequelize.define('User', {
   username: {
@@ -43,6 +44,11 @@ const User = sequelize.define('User', {
     type: DataTypes.INTEGER,
     allowNull: true,
   },
+  uniqueId: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
   createdAt: {
     type: DataTypes.DATE,
     allowNull: true,
@@ -57,5 +63,6 @@ const User = sequelize.define('User', {
 
 User.belongsTo(FamilyMember, { foreignKey: 'linkedFamilyMemberId', as: 'familyMember' });
 User.belongsTo(Provider, { foreignKey: 'linkedProviderId', as: 'provider' });
+User.belongsTo(VFO, { foreignKey: 'vfoId', as: 'vfo', onDelete: 'CASADE' });
 
 export default User;

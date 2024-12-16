@@ -1,8 +1,10 @@
 import User from "../models/User.js";
 import bcryptjs from "bcryptjs";
 import Family from "../models/family.js";
+import FamilyMember from "../models/familyMember.js";
+import Provider from "../models/provider.js";
 import { sendVerificationCode } from "../midlewares/mfa.js";
-import { decryptObject } from "../midlewares/jwt.js";
+import { decryptObject, encryptObject } from "../midlewares/jwt.js";
 import { getFamilyData } from "./familyController.js";
 
 const generateRandomPassword = () => {
@@ -16,7 +18,8 @@ const generateRandomPassword = () => {
 
 export const createUser = async (req, res) => {
   try {
-    const { name, email, phoneNumber } = req.body;
+    const { username, email, phoneNumber, type, uniqueId, vfoId } = req.body;
+
     const randomPassword = generateRandomPassword();
     const randomTokenPassword = generateRandomPassword();
 
@@ -24,37 +27,104 @@ export const createUser = async (req, res) => {
     const hashedPassword = await bcryptjs.hash(randomPassword, salt);
     const hashedTokenPassword = await bcryptjs.hash(randomTokenPassword, salt);
 
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+    const encryptedBody = encryptObject(req.body, ['uniqueId', 'vfoId', 'type']);
 
-    const mailOptions = {
-      from: '"Famhold - VFO" <no-reply@famhold.com>',
-      to: email,
-      subject: "Welcome to Famhold - Your Account Credentials",
-      text: `Dear ${name},\n\nYour account has been created successfully. Below are your credentials:\n\n- Password: ${randomPassword}\n- Family Token Reveal Password: ${randomTokenPassword}\n\nPlease keep these credentials secure and do not share them with anyone.\n\nBest regards,\nFamhold Team`,
-    };
+    const existingUsers = await User.count();
 
-    const emailResponse = await transporter.sendMail(mailOptions);
+    if (existingUsers === 0) {
+      const user = await User.create({
+        username: encryptedBody.username || username,
+        email: encryptedBody.email || email,
+        phoneNumber: encryptedBody.phoneNumber || phoneNumber,
+        type,
+        uniqueId,
+        vfoId,
+        password: hashedPassword,
+        familyTokenRevealPassword: hashedTokenPassword,
+      });
 
-    if (!emailResponse || !emailResponse.accepted.includes(email)) {
-      console.error("Failed to send email to:", email);
-      return res.status(500).json({ message: "Failed to send email. User not created." });
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+
+      const mailOptions = {
+        from: '"Famhold - VFO" <no-reply@famhold.com>',
+        to: email,
+        subject: "Welcome to Famhold - Your Account Credentials",
+        text: `Dear ${username},\n\nYour account has been created successfully. Below are your credentials:\n\n- Password: ${randomPassword}\n- Family Token Reveal Password: ${randomTokenPassword}\n\nPlease keep these credentials secure and do not share them with anyone.\n\nBest regards,\nFamhold Team`,
+      };
+
+      const emailResponse = await transporter.sendMail(mailOptions);
+
+      if (!emailResponse || !emailResponse.accepted.includes(email)) {
+        console.error("Failed to send email to:", email);
+        return res.status(500).json({ message: "Failed to send email. User not created." });
+      }
+
+      return res.status(201).json({ status: "201", user });
     }
 
-    const user = await User.create({
-      name,
-      email,
-      password: hashedPassword,
-      familyTokenRevealPassword: hashedTokenPassword,
-      phoneNumber,
-    });
+    if (type === 'FamilyMember') {
+      const familyMember = await FamilyMember.findOne({ where: { uniqueId } });
 
-    res.status(201).json({ status: "201", user });
+      if (!familyMember) {
+        return res.status(400).json({ message: "Invalid uniqueId. No matching FamilyMember found." });
+      }
+
+      const existingUser = await User.findOne({ where: { linkedFamilyMemberId: familyMember.id } });
+
+      if (existingUser) {
+        return res.status(400).json({ message: "This FamilyMember already has a user." });
+      }
+
+      const user = await User.create({
+        username: encryptedBody.username || username,
+        email: encryptedBody.email || email,
+        phoneNumber: encryptedBody.phoneNumber || phoneNumber,
+        type,
+        uniqueId,
+        vfoId,
+        password: hashedPassword,
+        familyTokenRevealPassword: hashedTokenPassword,
+        linkedFamilyMemberId: familyMember.id,
+      });
+
+      return res.status(201).json({ status: "201", user });
+    }
+
+    if (type === 'Provider') {
+      const provider = await Provider.findOne({ where: { uniqueId } });
+
+      if (!provider) {
+        return res.status(400).json({ message: "Invalid uniqueId. No matching Provider found." });
+      }
+
+      const existingUser = await User.findOne({ where: { linkedProviderId: provider.id } });
+
+      if (existingUser) {
+        return res.status(400).json({ message: "This Provider already has a user." });
+      }
+
+      const user = await User.create({
+        username: encryptedBody.username || username,
+        email: encryptedBody.email || email,
+        phoneNumber: encryptedBody.phoneNumber || phoneNumber,
+        type,
+        uniqueId,
+        vfoId,
+        password: hashedPassword,
+        familyTokenRevealPassword: hashedTokenPassword,
+        linkedProviderId: provider.id,
+      });
+
+      return res.status(201).json({ status: "201", user });
+    }
+
+    res.status(400).json({ message: "Invalid request." });
   } catch (error) {
     console.error("Error creating user:", error);
     res.status(500).json({ message: "Error creating user", error });

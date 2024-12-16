@@ -35,6 +35,25 @@ export const verifyToken =(allowedRoles = []) => (req, res, next) => {
     }
 };
 
+export const verifyTemporaryToken =() => (req, res, next) => {
+  let token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).json({ error: "Token not provided" });
+  }
+
+  token = token.split(" ")[1];
+
+  try {
+    jwt.verify(token, process.env.JWT_TEMPORARY_SECRET);
+
+    next();
+  } catch (error) {
+    console.error("Token verification error:", error);
+    return res.status(400).json({ error: "Invalid token" });
+  }
+};
+
 export const encryptObject = (data, excludeKeys = []) => {
   const encryptedObject = {};
 

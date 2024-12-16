@@ -102,3 +102,36 @@ export const validateAccountManager = async (req, res) => {
     res.status(500).json({ message: "Error validating user", error });
   }
 };
+
+export const validateCodeAccountManager = async (req, res) => {
+  const { username, password } = req.body;
+
+  // try {
+  //   const accountManagerUser = await AccountManager.findOne({ where: { username } });
+
+  //   if (!accountManagerUser) {
+  //     return res.status(404).json({ message: "Account manager not found" });
+  //   }
+
+  //   const isPasswordValid = await bcryptjs.compare(password, accountManagerUser.password);
+
+  //   if (!isPasswordValid) {
+  //     return res.status(401).json({ message: "Invalid credentials" });
+  //   }
+
+  //   const { success, token, error } = await sendVerificationCode(accountManagerUser.email, accountManagerUser.username, 'accountManager');
+
+  //   if (!success) {
+  //     return res.status(500).json({ error });
+  //   }
+
+  //   res.status(200).json({
+  //     message: "Verification code sent successfully.",
+  //     token,
+  //   });
+
+  // } catch (error) {
+  //   console.error("Error validating user:", error);
+  //   res.status(500).json({ message: "Error validating user", error });
+  // }
+};

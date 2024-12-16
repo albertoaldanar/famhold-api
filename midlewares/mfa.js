@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import bcryptjs from "bcryptjs";
 import NotPermittedDevice from "../models/notPermittedDevice.js";
 import User from "../models/User.js";
+import Family from "../models/family.js";
 
 export const sendVerificationCode = async (email, username, role) => {
   const code = Math.floor(100000 + Math.random() * 900000);
@@ -83,9 +84,17 @@ export const validateCode = async (req, res) => {
           userId: user.id,
         });
 
+        const temporaryToken = jwt.sign(
+          { deviceFingerPrint, user: user.id },
+          process.env.JWT_TEMPORARY_SECRET,
+          {
+            expiresIn: "2m",
+          }
+        );
+
         return res.status(403).json({
-          message:
-            "Este dispositivo no tiene permiso para entrar, por favor contacte a su asesor de cuenta para registrarlo.",
+          message: "Este dispositivo no tiene permiso para entrar, por favor contacte a su asesor de cuenta para registrarlo.",
+          token: temporaryToken,
         });
       }
 
@@ -99,14 +108,25 @@ export const validateCode = async (req, res) => {
       );
 
       if (role === "vfoUser") {
-        userData = { familyId: user.familyId, username, role };
-      } else {
-        userData = { username, role };
+        const family = await Family.findOne({ where: { id: user.vfoId } });
+
+        if (!family) {
+          return res.status(404).json({ message: "Family not found for the given VFO ID." });
+        }
+
+        userData = {
+          familyId: family.id,
+          vfoId: user.vfoId,
+          username,
+          role,
+        };
       }
 
-      return res
-        .status(200)
-        .json({ message: "Code validated successfully!", token: jsonwToken, data: userData });
+      return res.status(200).json({
+        message: "Code validated successfully!",
+        token: jsonwToken,
+        data: userData,
+      });
     } else {
       return res.status(400).json({ message: "Invalid code." });
     }
@@ -115,4 +135,3 @@ export const validateCode = async (req, res) => {
     return res.status(400).json({ message: "Invalid or expired token." });
   }
 };
-
