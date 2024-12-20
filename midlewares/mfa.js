@@ -118,6 +118,7 @@ export const validateCode = async (req, res) => {
           familyId: family.id,
           vfoId: user.vfoId,
           username,
+          userId: user.id,
           role,
         };
       }

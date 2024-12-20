@@ -19,6 +19,13 @@ const generateRandomPassword = () => {
 export const createUser = async (req, res) => {
   try {
     const { username, email, phoneNumber, type, uniqueId, vfoId } = req.body;
+    const requiredFields = { username, email, phoneNumber, type, uniqueId, vfoId };
+
+    for (const [field, value] of Object.entries(requiredFields)) {
+      if (!value) {
+        return res.status(400).json({ message: `Missing required field: ${field}` });
+      }
+    }
 
     const randomPassword = generateRandomPassword();
     const randomTokenPassword = generateRandomPassword();
@@ -37,7 +44,6 @@ export const createUser = async (req, res) => {
         email: encryptedBody.email || email,
         phoneNumber: encryptedBody.phoneNumber || phoneNumber,
         type,
-        uniqueId,
         vfoId,
         password: hashedPassword,
         familyTokenRevealPassword: hashedTokenPassword,
@@ -69,13 +75,18 @@ export const createUser = async (req, res) => {
     }
 
     if (type === 'FamilyMember') {
-      const familyMember = await FamilyMember.findOne({ where: { uniqueId } });
+      const familyMembers = await FamilyMember.findAll();
 
-      if (!familyMember) {
+      const matchedFamilyMember = familyMembers.find((member) => {
+        const decryptedMember = decryptObject({ uniqueId: member.uniqueId });
+        return decryptedMember.uniqueId === uniqueId;
+      });
+
+      if (!matchedFamilyMember) {
         return res.status(400).json({ message: "Invalid uniqueId. No matching FamilyMember found." });
       }
 
-      const existingUser = await User.findOne({ where: { linkedFamilyMemberId: familyMember.id } });
+      const existingUser = await User.findOne({ where: { linkedFamilyMemberId: matchedFamilyMember.id } });
 
       if (existingUser) {
         return res.status(400).json({ message: "This FamilyMember already has a user." });
@@ -86,24 +97,28 @@ export const createUser = async (req, res) => {
         email: encryptedBody.email || email,
         phoneNumber: encryptedBody.phoneNumber || phoneNumber,
         type,
-        uniqueId,
         vfoId,
         password: hashedPassword,
         familyTokenRevealPassword: hashedTokenPassword,
-        linkedFamilyMemberId: familyMember.id,
+        linkedFamilyMemberId: matchedFamilyMember.id,
       });
 
       return res.status(201).json({ status: "201", user });
     }
 
     if (type === 'Provider') {
-      const provider = await Provider.findOne({ where: { uniqueId } });
+      const providers = await Provider.findAll();
 
-      if (!provider) {
+      const matchedProvider = providers.find((provider) => {
+        const decryptedProvider = decryptObject({ uniqueId: provider.uniqueId });
+        return decryptedProvider.uniqueId === uniqueId;
+      });
+
+      if (!matchedProvider) {
         return res.status(400).json({ message: "Invalid uniqueId. No matching Provider found." });
       }
 
-      const existingUser = await User.findOne({ where: { linkedProviderId: provider.id } });
+      const existingUser = await User.findOne({ where: { linkedProviderId: matchedProvider.id } });
 
       if (existingUser) {
         return res.status(400).json({ message: "This Provider already has a user." });
@@ -114,11 +129,10 @@ export const createUser = async (req, res) => {
         email: encryptedBody.email || email,
         phoneNumber: encryptedBody.phoneNumber || phoneNumber,
         type,
-        uniqueId,
         vfoId,
         password: hashedPassword,
         familyTokenRevealPassword: hashedTokenPassword,
-        linkedProviderId: provider.id,
+        linkedProviderId: matchedProvider.id,
       });
 
       return res.status(201).json({ status: "201", user });
@@ -274,26 +288,44 @@ export const validateUsers = async (req, res) => {
   const { username, password, familyId, familyToken } = req.body;
 
   try {
-    const family = await Family.findOne({ where: { familyId } });
-    if (!family) {
+    const families = await Family.findAll();
+
+    const matchedFamily = families.find((family) => {
+      const decryptedFamily = decryptObject({ familyId: family.familyId });
+      return decryptedFamily.familyId === familyId;
+    });
+
+    if (!matchedFamily) {
       return res.status(404).json({ message: "Invalid credentials" });
     }
 
-    if (family.familyToken !== familyToken) {
+    if (matchedFamily.familyToken !== familyToken) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const user = await User.findOne({ where: { username } });
-    if (!user) {
+    const users = await User.findAll();
+
+    const matchedUser = users.find((user) => {
+      const decryptedUser = decryptObject({ username: user.username });
+      return decryptedUser.username === username;
+    });
+
+    if (!matchedUser) {
       return res.status(404).json({ message: "Invalid credentials" });
     }
 
-    const isPasswordValid = await bcryptjs.compare(password, user.password);
+    const isPasswordValid = await bcryptjs.compare(password, matchedUser.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const { success, token, error } = await sendVerificationCode(user.email, user.user, 'vfoUser');
+    const decryptedEmail = decryptObject({ email: matchedAdmin.email }).email;
+
+    const { success, token, error } = await sendVerificationCode(
+      decryptedEmail,
+      matchedUser.user,
+      "vfoUser"
+    );
 
     if (!success) {
       return res.status(500).json({ error });
@@ -303,7 +335,6 @@ export const validateUsers = async (req, res) => {
       message: "Verification code sent successfully.",
       token,
     });
-
   } catch (error) {
     console.error("Error validating user:", error);
     res.status(500).json({ message: "Error validating user", error });

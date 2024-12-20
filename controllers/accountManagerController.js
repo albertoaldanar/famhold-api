@@ -2,6 +2,7 @@ import AccountManager from "../models/accountManager.js";
 import bcryptjs from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { sendVerificationCode } from "../midlewares/mfa.js";
+import { encryptObject, decryptObject } from "../midlewares/jwt.js";
 
 export const createAccountManager = async (req, res) => {
   const { username, name, email, phoneNumber, password } = req.body;
@@ -27,27 +28,18 @@ export const createAccountManager = async (req, res) => {
       .json({ message: "Password is required and must be a string." });
   }
 
-  // if (!devicePermitted || typeof devicePermitted !== "string") {
-  //   return res.status(400).json({ message: "devicePermitted is required" });
-  // }
-
-  const salt = await bcryptjs.genSalt(10);
-  const hashedPassword = await bcryptjs.hash(password, salt);
-
-  // const devicePermittedSalt = await bcryptjs.genSalt(10);
-  // const hashedDevicePermittedId = await bcryptjs.hash(
-  //   devicePermittedSalt,
-  //   devicePermitted
-  // );
-
   try {
+    const salt = await bcryptjs.genSalt(10);
+    const hashedPassword = await bcryptjs.hash(password, salt);
+
+    const encryptedBody = encryptObject(req.body, ["password"]);
+
     const newAccountManager = await AccountManager.create({
-      username,
-      name,
-      email,
-      phoneNumber,
+      username: encryptedBody.username || username,
+      name: encryptedBody.name || name,
+      email: encryptedBody.email || email,
+      phoneNumber: encryptedBody.phoneNumber || phoneNumber,
       password: hashedPassword,
-      // permittedDevices: [hashedDevicePermittedId],
     });
 
     return res.status(201).json({
@@ -74,19 +66,30 @@ export const validateAccountManager = async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    const accountManagerUser = await AccountManager.findOne({ where: { username } });
+    const accountManagers = await AccountManager.findAll();
 
-    if (!accountManagerUser) {
+    const matchedAccountManager = accountManagers.find((manager) => {
+      const decryptedManager = decryptObject({ username: manager.username });
+      return decryptedManager.username === username;
+    });
+
+    if (!matchedAccountManager) {
       return res.status(404).json({ message: "Account manager not found" });
     }
 
-    const isPasswordValid = await bcryptjs.compare(password, accountManagerUser.password);
+    const isPasswordValid = await bcryptjs.compare(password, matchedAccountManager.password);
 
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const { success, token, error } = await sendVerificationCode(accountManagerUser.email, accountManagerUser.username, 'accountManager');
+    const decryptedEmail = decryptObject({ email: matchedAccountManager.email }).email;
+
+    const { success, token, error } = await sendVerificationCode(
+      decryptedEmail,
+      matchedAccountManager.username,
+      'accountManager'
+    );
 
     if (!success) {
       return res.status(500).json({ error });
@@ -96,42 +99,54 @@ export const validateAccountManager = async (req, res) => {
       message: "Verification code sent successfully.",
       token,
     });
-
   } catch (error) {
-    console.error("Error validating user:", error);
-    res.status(500).json({ message: "Error validating user", error });
+    console.error("Error validating account manager:", error);
+    res.status(500).json({ message: "Error validating account manager", error });
   }
 };
 
 export const validateCodeAccountManager = async (req, res) => {
-  const { username, password } = req.body;
+  const { userCode } = req.body;
+  let token = req.headers.authorization;
 
-  // try {
-  //   const accountManagerUser = await AccountManager.findOne({ where: { username } });
+  token = token.split(" ")[1];
 
-  //   if (!accountManagerUser) {
-  //     return res.status(404).json({ message: "Account manager not found" });
-  //   }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { code, username, role } = decoded;
 
-  //   const isPasswordValid = await bcryptjs.compare(password, accountManagerUser.password);
+    if (code === userCode) {
+      const accountManager = await AccountManager.findOne({ where: { username } });
 
-  //   if (!isPasswordValid) {
-  //     return res.status(401).json({ message: "Invalid credentials" });
-  //   }
+      if (!accountManager) {
+        return res.status(404).json({ message: "Account Manager not found." });
+      }
 
-  //   const { success, token, error } = await sendVerificationCode(accountManagerUser.email, accountManagerUser.username, 'accountManager');
+      const jsonwToken = jwt.sign(
+        { username, role },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: "5m",
+        }
+      );
+      const usernameDecrypted = decryptObject({ username: manager.username }).username;
 
-  //   if (!success) {
-  //     return res.status(500).json({ error });
-  //   }
+      const userData = {
+        accountManagerId: accountManager.id,
+        username: usernameDecrypted,
+        role,
+      };
 
-  //   res.status(200).json({
-  //     message: "Verification code sent successfully.",
-  //     token,
-  //   });
-
-  // } catch (error) {
-  //   console.error("Error validating user:", error);
-  //   res.status(500).json({ message: "Error validating user", error });
-  // }
+      return res.status(200).json({
+        message: "Code validated successfully!",
+        token: jsonwToken,
+        data: userData,
+      });
+    } else {
+      return res.status(400).json({ message: "Invalid code." });
+    }
+  } catch (error) {
+    console.error("Error validating code for Account Manager:", error);
+    return res.status(400).json({ message: "Invalid or expired token." });
+  }
 };

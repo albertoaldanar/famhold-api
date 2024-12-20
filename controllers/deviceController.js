@@ -14,6 +14,12 @@ export const acceptNotPermittedDevice = async (req, res) => {
       return res.status(404).json({ message: "NotPermittedDevice not found." });
     }
 
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
     const permittedDevice = await PermittedDevice.create({
       userId,
       deviceFingerPrint,
@@ -22,12 +28,6 @@ export const acceptNotPermittedDevice = async (req, res) => {
     });
 
     await notPermittedDevice.destroy();
-
-    const user = await User.findByPk(userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
 
     const permittedDevices = user.permittedDevices || [];
 

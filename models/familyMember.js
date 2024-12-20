@@ -3,6 +3,11 @@ import sequelize from '../database/database.js';
 import Family from './family.js';
 
 const FamilyMember = sequelize.define('FamilyMember', {
+  uniqueId: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
   name: {
     type: DataTypes.STRING,
     allowNull: false,
