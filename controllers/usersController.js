@@ -5,7 +5,7 @@ import FamilyMember from "../models/familyMember.js";
 import Provider from "../models/provider.js";
 import { sendVerificationCode } from "../midlewares/mfa.js";
 import { decryptObject, encryptObject } from "../midlewares/jwt.js";
-import { getFamilyData } from "./familyController.js";
+import VFO from "../models/vfo.js";
 
 const generateRandomPassword = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -45,6 +45,7 @@ export const createUser = async (req, res) => {
         phoneNumber: encryptedBody.phoneNumber || phoneNumber,
         type,
         vfoId,
+        isAccountOn: true,
         password: hashedPassword,
         familyTokenRevealPassword: hashedTokenPassword,
       });
@@ -98,6 +99,7 @@ export const createUser = async (req, res) => {
         phoneNumber: encryptedBody.phoneNumber || phoneNumber,
         type,
         vfoId,
+        isAccountOn: true,
         password: hashedPassword,
         familyTokenRevealPassword: hashedTokenPassword,
         linkedFamilyMemberId: matchedFamilyMember.id,
@@ -130,6 +132,7 @@ export const createUser = async (req, res) => {
         phoneNumber: encryptedBody.phoneNumber || phoneNumber,
         type,
         vfoId,
+        isAccountOn: true,
         password: hashedPassword,
         familyTokenRevealPassword: hashedTokenPassword,
         linkedProviderId: matchedProvider.id,
@@ -299,7 +302,9 @@ export const validateUsers = async (req, res) => {
       return res.status(404).json({ message: "Invalid credentials" });
     }
 
-    if (matchedFamily.familyToken !== familyToken) {
+    const decryptedFamilyToken = decryptObject({ familyToken: matchedFamily.familyToken });
+
+    if (decryptedFamilyToken.familyToken !== familyToken) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
@@ -317,6 +322,19 @@ export const validateUsers = async (req, res) => {
     const isPasswordValid = await bcryptjs.compare(password, matchedUser.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    if (!matchedUser.isAccountOn) {
+      return res
+        .status(403)
+        .json({ error: "Account temporarily unavailable" });
+    }
+
+    const vfo = await VFO.findByPk(matchedUser.vfoId);
+    if (!vfo || !vfo.isVfoOn) {
+      return res
+        .status(403)
+        .json({ error: "VFO temporarily unavailable" });
     }
 
     const decryptedEmail = decryptObject({ email: matchedAdmin.email }).email;
@@ -338,5 +356,54 @@ export const validateUsers = async (req, res) => {
   } catch (error) {
     console.error("Error validating user:", error);
     res.status(500).json({ message: "Error validating user", error });
+  }
+};
+
+export const updateUserAccount = async (req, res) => {
+  const { userId, isAccountOn, status, name, username, email, phoneNumber } = req.body;
+
+  try {
+    if (
+      isAccountOn === undefined &&
+      !status &&
+      !name &&
+      !username &&
+      !email &&
+      !phoneNumber
+    ) {
+      return res
+        .status(400)
+        .json({ message: "At least one parameter must be provided to update." });
+    }
+
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const fieldsToUpdate = {};
+
+    if (isAccountOn !== undefined) fieldsToUpdate.isAccountOn = isAccountOn;
+    if (status) fieldsToUpdate.status = status;
+    if (name) fieldsToUpdate.name = name;
+    if (username) fieldsToUpdate.username = username;
+    if (email) fieldsToUpdate.email = email;
+    if (phoneNumber) fieldsToUpdate.phoneNumber = phoneNumber;
+
+    const encryptedFields = encryptObject(fieldsToUpdate, ["isAccountOn"]);
+
+    await user.update(encryptedFields);
+
+    const statusMessage = isAccountOn
+      ? "User account turned on"
+      : isAccountOn === false
+      ? "User account turned off"
+      : "User details updated";
+
+    res.status(200).json({ message: statusMessage, data: fieldsToUpdate });
+  } catch (error) {
+    console.error("Error updating user account:", error);
+    res.status(500).json({ message: "Error updating user account", error });
   }
 };

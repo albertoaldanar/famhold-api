@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import bcryptjs from "bcryptjs";
 
 export const acceptNotPermittedDevice = async (req, res) => {
-  const { userId, deviceId, deviceFingerPrint } = req.body;
+  const { userId, deviceId } = req.body;
 
   try {
     const notPermittedDevice = await NotPermittedDevice.findByPk(deviceId);
@@ -22,7 +22,7 @@ export const acceptNotPermittedDevice = async (req, res) => {
 
     const permittedDevice = await PermittedDevice.create({
       userId,
-      deviceFingerPrint,
+      deviceFingerPrint: notPermittedDevice.deviceFingerPrint,
       lastLogin: new Date().toISOString(),
       deviceInfo: notPermittedDevice.deviceInfo,
     });
@@ -31,12 +31,12 @@ export const acceptNotPermittedDevice = async (req, res) => {
 
     const permittedDevices = user.permittedDevices || [];
 
-    permittedDevices.push(deviceFingerPrint);
+    permittedDevices.push(notPermittedDevice.deviceFingerPrint);
 
     await user.update({ permittedDevices });
 
     return res.status(200).json({
-      message: "Device successfully permitted.",
+      message: "Device successfully permitted",
       permittedDevice,
     });
   } catch (error) {

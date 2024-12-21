@@ -42,7 +42,7 @@ export const sendVerificationCode = async (email, username, role) => {
 
 export const validateCode = async (req, res) => {
   let token = req.headers.authorization;
-  const { userCode, deviceFingerPrint, location, deviceInfo } = req.body;
+  const { userCode, deviceFingerPrint, location, deviceInfo, firstAttempt } = req.body;
 
   token = token.split(" ")[1];
 
@@ -68,29 +68,23 @@ export const validateCode = async (req, res) => {
       if (!isDevicePermitted) {
         const lastLoginAttempt = format(new Date(), 'dd/MM/yyyy - HH:mm');
         const hashedDeviceFingerprint = await bcryptjs.hash(deviceFingerPrint, 10);
+        
+        if(firstAttempt){
+          const encryptedData = encryptObject(
+            {
+              location: location || "Unknown",
+              deviceInfo: deviceInfo || "Unknown",
+              lastLoginAttempt,
+            },
+            ['userId']
+          );
 
-        const encryptedData = encryptObject(
-          {
-            location: location || "Unknown",
-            deviceInfo: deviceInfo || "Unknown",
-            lastLoginAttempt,
-          },
-          ['userId']
-        );
-
-        await NotPermittedDevice.create({
-          ...encryptedData,
-          deviceFingerprint: hashedDeviceFingerprint,
-          userId: user.id,
-        });
-
-        const temporaryToken = jwt.sign(
-          { deviceFingerPrint, user: user.id },
-          process.env.JWT_TEMPORARY_SECRET,
-          {
-            expiresIn: "2m",
-          }
-        );
+          await NotPermittedDevice.create({
+            ...encryptedData,
+            deviceFingerprint: hashedDeviceFingerprint,
+            userId: user.id,
+          });
+        }
 
         return res.status(403).json({
           message: "Este dispositivo no tiene permiso para entrar, por favor contacte a su asesor de cuenta para registrarlo.",
@@ -100,7 +94,7 @@ export const validateCode = async (req, res) => {
 
       let userData;
       const jsonwToken = jwt.sign(
-        { username, role },
+        { username, role, userId: user.id },
         process.env.JWT_SECRET,
         {
           expiresIn: "5m",

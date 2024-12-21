@@ -123,7 +123,7 @@ export const validateCodeAccountManager = async (req, res) => {
       }
 
       const jsonwToken = jwt.sign(
-        { username, role },
+        { username, role, useId: accountManager.id },
         process.env.JWT_SECRET,
         {
           expiresIn: "5m",

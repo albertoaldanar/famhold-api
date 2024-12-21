@@ -1,41 +1,83 @@
 import jwt from "jsonwebtoken";
 import CryptoJS from "crypto-js";
-/**
- * Encrypts the values of an object except for specified keys.
- *
- * @param {Object} data - The object to be processed.
- * @param {Array} excludeKeys - Array of keys to exclude from encryption.
- * @returns {Object} - A new object with encrypted and unencrypted values.
- */
+import User from "../models/user.js";
+import bcryptjs from "bcryptjs";
+import AccountManager from "../models/accountManager.js";
+import FamholdAdmin from "../models/famholdAdmin.js";
+import VFO from "../models/vfo.js";
 
-export const verifyToken =(allowedRoles = []) => (req, res, next) => {
-    let token = req.headers.authorization;
+export const verifyToken = (allowedRoles = []) => async (req, res, next) => {
+  let token = req.headers.authorization;
+  const { deviceFingerPrint } = req.body;
 
-    if (!token) {
-      return res.status(401).json({ error: "Token not provided" });
+  if (!token) {
+    return res.status(401).json({ error: "Token not provided" });
+  }
+
+  token = token.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { username, userId, role } = decoded;
+
+    req.username = username;
+    req.userId = userId;
+    req.role = role;
+
+    if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
+      return res
+        .status(403)
+        .json({ error: "Access forbidden: insufficient permissions" });
     }
 
-    token = token.split(" ")[1];
+    let user;
 
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.username = decoded.username;
-      req.role = decoded.role;
+    if (role === "vfoUser") {
+      user = await User.findOne({ where: { id: userId, username } });
+    } else if (role === "famholdAdmin") {
+      user = await FamholdAdmin.findOne({ where: { id: userId, username } });
+    } else if (role === "accountManager") {
+      user = await AccountManager.findOne({ where: { id: userId, username } });
+    }
 
-      if (allowedRoles.length > 0 && !allowedRoles.includes(req.role)) {
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    if (role === "vfoUser") {
+      if (!user.isAccountOn) {
         return res
           .status(403)
-          .json({ error: "Access forbidden: insufficient permissions" });
+          .json({ error: "Account temporarily unavailable" });
       }
 
-      next();
-    } catch (error) {
-      console.error("Token verification error:", error);
-      return res.status(400).json({ error: "Invalid token" });
+      const permittedDevices = user.permittedDevices || [];
+      const isDevicePermitted = await Promise.all(
+        permittedDevices.map((hashedDevice) =>
+          bcryptjs.compare(deviceFingerPrint, hashedDevice)
+        )
+      ).then((results) => results.some((match) => match));
+
+      if (!isDevicePermitted) {
+        return res.status(400).json({ error: "Device not permitted" });
+      }
+
+      const vfo = await VFO.findByPk(user.vfoId);
+      if (!vfo || !vfo.isVfoOn) {
+        return res
+          .status(403)
+          .json({ error: "VFO temporarily unavailable" });
+      }
     }
+
+    next();
+  } catch (error) {
+    console.error("Token verification error:", error);
+    return res.status(400).json({ error: "Invalid token" });
+  }
 };
 
-export const verifyTemporaryToken =() => (req, res, next) => {
+export const verifyTemporaryToken = () => (req, res, next) => {
   let token = req.headers.authorization;
 
   if (!token) {
