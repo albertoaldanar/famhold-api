@@ -1,7 +1,7 @@
-import VFO from "../models/vfo";
-import Family from "../models/family";
-import User from "../models/user";
-import { decryptObject } from "../midlewares/jwt";
+import VFO from "../models/vfo.js";
+import Family from "../models/family.js";
+import User from "../models/user.js";
+import { decryptObject } from "../midlewares/jwt.js";
 
 export const getVfosForAccountManager = async (req, res) => {
   const { accountManagerId } = req.body;

@@ -1,5 +1,5 @@
 import FamilyMember from '../models/familyMember.js';
-import { encryptObject } from '../middlewares/jwt.js';
+import { encryptObject } from '../midlewares/jwt.js';
 
 const generateUniqueId = (name) => {
   const namePart = name.slice(0, 3).toUpperCase();
